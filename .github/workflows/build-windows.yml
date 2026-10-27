@@ -2,7 +2,8 @@ name: Build Windows
 
 on:
   push:
-    branches: [main, master]
+    branches: [main, master, selfhost]
+  workflow_dispatch:
   pull_request:
     branches: [main, master]
 
@@ -316,3 +317,29 @@ jobs:
           certutil -delstore Disallowed "Mailspring Test Intermediate" > /dev/null
           e2e --host 127.0.0.1 --expect accept
           certutil -delstore Root "Mailspring Test Root" > /dev/null
+
+  # Self-host fork: publish the tested build as a fixed release the Mailspring client
+  # workflow downloads (https://github.com/ssevban/Mailspring, branch selfhost).
+  publish-selfhost:
+    if: github.ref == 'refs/heads/selfhost'
+    needs: [build-windows, test-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: win-ia32-mailsync
+
+      - name: Replace the selfhost-win-ia32 release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release delete selfhost-win-ia32 --yes --cleanup-tag || true
+          gh release create selfhost-win-ia32 mailsync.tar.gz \
+            --target "$GITHUB_SHA" \
+            --title "mailsync win-ia32 (${GITHUB_SHA::8})" \
+            --notes "Windows mailsync built from ${GITHUB_SHA} on the selfhost branch."
